@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <mutex>
 
 #include <vsomeip/vsomeip.hpp>
 
@@ -18,6 +19,8 @@
 
 class client_sample {
 public:
+
+
     client_sample(bool _use_tcp, bool _be_quiet, uint32_t _cycle)
         : app_(vsomeip::runtime::get()->create_application()),
           request_(vsomeip::runtime::get()->create_request(_use_tcp)),
@@ -28,13 +31,14 @@ public:
           blocked_(false),
           is_available_(false),
           sender_(std::bind(&client_sample::run, this)) {
-    }
+          }
 
     bool init() {
         if (!app_->init()) {
             std::cerr << "Couldn't initialize application" << std::endl;
             return false;
         }
+
 
         std::cout << "Client settings [protocol="
                   << (use_tcp_ ? "TCP" : "UDP")
@@ -61,12 +65,6 @@ public:
         request_->set_instance(SAMPLE_INSTANCE_ID);
         request_->set_method(SAMPLE_METHOD_ID);
 
-        std::shared_ptr< vsomeip::payload > its_payload = vsomeip::runtime::get()->create_payload();
-        std::vector< vsomeip::byte_t > its_payload_data;
-        for (std::size_t i = 0; i < 10; ++i) its_payload_data.push_back(i % 256);
-        its_payload->set_data(its_payload_data);
-        request_->set_payload(its_payload);
-
         app_->register_availability_handler(SAMPLE_SERVICE_ID, SAMPLE_INSTANCE_ID,
                 std::bind(&client_sample::on_availability,
                           this,
@@ -76,6 +74,7 @@ public:
                 std::bind(&client_sample::on_availability,
                           this,
                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
         return true;
     }
 
@@ -105,12 +104,14 @@ public:
     }
 
     void on_availability(vsomeip::service_t _service, vsomeip::instance_t _instance, bool _is_available) {
+        if(timestop){
         std::cout << "Service ["
                 << std::setw(4) << std::setfill('0') << std::hex << _service << "." << _instance
                 << "] is "
                 << (_is_available ? "available." : "NOT available.")
                 << std::endl;
-
+                timestop = 0;
+        }
         if (SAMPLE_SERVICE_ID == _service && SAMPLE_INSTANCE_ID == _instance) {
             if (is_available_  && !_is_available) {
                 is_available_ = false;
@@ -122,7 +123,15 @@ public:
     }
 
     void on_message(const std::shared_ptr< vsomeip::message > &_response) {
-        std::cout << "Received a response from Service ["
+
+        vsomeip::byte_t dig_;
+        dig_ = _response->get_payload()->get_length();
+        vsomeip::byte_t ans_[dig_];
+        for(int j = 0 ; j < dig_ ; j++)
+        {
+            ans_[j] = _response->get_payload()->get_data()[j] ;
+        }
+        std::cout << "Received an answer from Service ["
                 << std::setw(4) << std::setfill('0') << std::hex << _response->get_service()
                 << "."
                 << std::setw(4) << std::setfill('0') << std::hex << _response->get_instance()
@@ -131,7 +140,19 @@ public:
                 << "/"
                 << std::setw(4) << std::setfill('0') << std::hex << _response->get_session()
                 << "]"
-                << std::endl;
+                << std::endl << "The answer is : ";
+        for(int k = 0 ; k < dig_-1 ; k++)
+        {
+            std::cout  << std::dec << ans_[k];
+        }
+        std::cout << std::endl;
+        if(ans_[dig_-1]  != '0')
+        {
+            int Mo_ = ans_[dig_-1] - '0';
+            std::cout << "The modulo is : "<< std::dec << Mo_ << std::endl;
+        }
+        std::cout << std::endl ;
+
         if (is_available_)
             send();
     }
@@ -151,21 +172,37 @@ public:
                 std::unique_lock<std::mutex> its_lock(mutex_);
                 while (!blocked_) condition_.wait(its_lock);
                 if (is_available_) {
-                    app_->send(request_);
-                    std::cout << "Client/Session ["
-                            << std::setw(4) << std::setfill('0') << std::hex << request_->get_client()
-                            << "/"
-                            << std::setw(4) << std::setfill('0') << std::hex << request_->get_session()
-                            << "] sent a request to Service ["
-                            << std::setw(4) << std::setfill('0') << std::hex << request_->get_service()
-                            << "."
-                            << std::setw(4) << std::setfill('0') << std::hex << request_->get_instance()
-                            << "]"
-                            << std::endl;
+                std::cout << "Please enter your question (space is not allowable)" << std::endl;
+                std::shared_ptr< vsomeip::payload > its_payload = vsomeip::runtime::get()->create_payload();
+                std::cout << std::endl;
+                std::string q;
+                std::cin >> q; 
+                timestop = 1;
+                std::cout << std::endl;
+                std::vector<vsomeip::byte_t> its_payload_data;
+                vsomeip::byte_t size = q.length();
+                //stc : string to char
+                for(int stc = 0 ; stc < size ; stc++)
+                {
+                    its_payload_data.push_back(q[stc]);
+                }
+                its_payload->set_data(its_payload_data);
+                request_->set_payload(its_payload);
+                app_->send(request_);
+                std::cout << "Client/Session ["
+                        << std::setw(4) << std::setfill('0') << std::hex << request_->get_client()
+                        << "/"
+                        << std::setw(4) << std::setfill('0') << std::hex << request_->get_session()
+                        << "] sent a request to Service ["
+                        << std::setw(4) << std::setfill('0') << std::hex << request_->get_service()
+                        << "."
+                        << std::setw(4) << std::setfill('0') << std::hex << request_->get_instance()
+                        << "]"
+                        << std::endl;
+                        
                     blocked_ = false;
                 }
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(cycle_));
         }
     }
 

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <mutex>
 
 #include <vsomeip/vsomeip.hpp>
 
@@ -94,7 +95,7 @@ public:
     }
 
     void on_message(const std::shared_ptr<vsomeip::message> &_request) {
-        std::cout << "Received a message with Client/Session [" << std::setw(4)
+        std::cout << "Received a question from Client/Session [" << std::setw(4)
             << std::setfill('0') << std::hex << _request->get_client() << "/"
             << std::setw(4) << std::setfill('0') << std::hex
             << _request->get_session() << "]"
@@ -102,12 +103,75 @@ public:
 
         std::shared_ptr<vsomeip::message> its_response
             = vsomeip::runtime::get()->create_response(_request);
-
         std::shared_ptr<vsomeip::payload> its_payload
             = vsomeip::runtime::get()->create_payload();
-        std::vector<vsomeip::byte_t> its_payload_data;
-        for (std::size_t i = 0; i < 120; ++i)
-        its_payload_data.push_back(i % 256);
+        std::vector<vsomeip::byte_t>  its_payload_data;
+        vsomeip::byte_t  req_data_size; 
+        req_data_size = _request->get_payload()->get_length();
+        vsomeip::byte_t q_[req_data_size];
+        std::cout << "The question is : ";
+        for(int j = 0 ; j < req_data_size ; j++)
+        {
+            std::cout <<   _request->get_payload()->get_data()[j];
+            q_[j] = _request->get_payload()->get_data()[j];
+        }
+        std::cout << std::endl;
+        // n1(Number 1)  n2(Number 2)  ans(answer)  op( operator position)  Mo(Modulo)
+        int n1, n2, ans, op, Mo = 0;
+        // char to int
+        int ci[req_data_size];
+        for(int l = 0 ; l < req_data_size ; l++)
+        {
+            if(isalnum(q_[l]) == false)
+                op = l;
+        }
+        for(int m = 0 ; m < req_data_size ; m++)
+        {
+            ci[m] = q_[m] - '0';
+        }
+        n1 = ci[0];
+        for(int n = 0 ; n < op-1 ; n++)
+        {
+            n1 = n1*10 + ci[n+1];
+        }
+        n2=ci[op+1];
+        for(int o = op+1 ; o < req_data_size-1 ; o++){
+            n2=n2*10+ci[o+1];
+        }
+        if(q_[op] == '+')
+        {
+            ans = n1 + n2;
+        }
+        else if(q_[op] == '-')
+        {
+            ans = n1 - n2;
+        }
+        else if(q_[op] == '*')
+        {
+            ans = n1 * n2;
+        }
+        else if(q_[op] == '/')
+        {
+            if(n1%n2 == 0)
+            {
+                ans = n1 / n2;
+            }
+            else 
+            {
+                ans = n1/n2;
+                Mo = n1%n2;
+            }
+        }
+
+        vsomeip::byte_t dig = 0, sM;
+        std::string s = std::to_string(ans);
+        sM = Mo + '0';
+        dig = s.length();
+        for(int p = 0 ; p < dig ; p++)
+        {
+            its_payload_data.push_back(s[p]);
+        }
+        its_payload_data.push_back(sM);
         its_payload->set_data(its_payload_data);
         its_response->set_payload(its_payload);
 
@@ -133,7 +197,7 @@ public:
 
                 for (int i = 0; i < 10 && running_; i++)
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                is_offer = !is_offer;
+                // is_offer = !is_offer;
             }
         }
     }
