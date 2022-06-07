@@ -104,14 +104,11 @@ public:
     }
 
     void on_availability(vsomeip::service_t _service, vsomeip::instance_t _instance, bool _is_available) {
-        if(timestop){
         std::cout << "Service ["
                 << std::setw(4) << std::setfill('0') << std::hex << _service << "." << _instance
                 << "] is "
                 << (_is_available ? "available." : "NOT available.")
                 << std::endl;
-                timestop = 0;
-        }
         if (SAMPLE_SERVICE_ID == _service && SAMPLE_INSTANCE_ID == _instance) {
             if (is_available_  && !_is_available) {
                 is_available_ = false;
@@ -177,7 +174,6 @@ public:
                 std::cout << std::endl;
                 std::string q;
                 std::cin >> q; 
-                timestop = 1;
                 std::cout << std::endl;
                 std::vector<vsomeip::byte_t> its_payload_data;
                 vsomeip::byte_t size = q.length();
